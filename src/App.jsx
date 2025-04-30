@@ -203,7 +203,15 @@ export default function App() {
     }, {});
     console.log('Generated Config:', JSON.stringify(configs, null, 2));
   };
-
+  const handleAdvancedChange = (itemId, advanced) => {
+    setWhiteboardItems(ws =>
+      ws.map(i =>
+        i.id === itemId
+          ? { ...i, advanced }
+          : i
+      )
+    );
+  };
   return (
     <DndProvider backend={HTML5Backend}>
       <Box className="flex flex-col h-screen bg-gray-100">
@@ -264,6 +272,7 @@ export default function App() {
                   ws.map(i => i.id === id ? { ...i, group: grp } : i)
                 )
               }
+              onAdvancedChange={handleAdvancedChange}
             />
           </Box>
         </Box>

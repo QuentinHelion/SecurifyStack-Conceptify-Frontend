@@ -17,6 +17,7 @@ export default function BoardView({
     onRoleToggle,
     onVlanChange,
     onGroupChange,
+    onAdvancedChange,
 }) {
     // Compute VLAN-group bounding boxes, now including vmPack.group.vlans
     const vlanBounds = vlans
@@ -80,6 +81,7 @@ export default function BoardView({
                         onGroupChange={onGroupChange}
                         onContextMenu={e => { e.preventDefault(); onDeleteItem(item.id); }}
                         gridSize={gridSize}
+                        onAdvancedChange={onAdvancedChange}
                     />
                 ))}
 
