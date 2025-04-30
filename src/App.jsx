@@ -131,7 +131,7 @@ export default function App() {
         roles: [],
         vlans: [],
         ...(base === 'vmPack'
-          ? { group: { count: 1, os: 'Debian', vlans: [] } }
+          ? { group: { count: '', os: 'Debian', vlans: [] } }
           : {}
         )
       };
