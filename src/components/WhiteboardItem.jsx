@@ -1,5 +1,5 @@
 // src/components/WhiteboardItem.jsx
-import React, { useState, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { useDrag } from 'react-dnd';
 import {
   Paper,
@@ -21,6 +21,8 @@ import {
   Slide,
   TextField,
   Box,
+  Radio,
+  RadioGroup,
 } from '@mui/material';
 
 const Transition = forwardRef((props, ref) => (
@@ -51,19 +53,31 @@ export default function WhiteboardItem({
     collect: m => ({ isDragging: !!m.isDragging() }),
   }));
 
-  // Popover for Roles/VLANs
+  // Popover
   const [anchorEl, setAnchorEl] = useState(null);
   const openPopover = Boolean(anchorEl);
 
   // Advanced dialog
   const [advOpen, setAdvOpen] = useState(false);
 
-  // Extract advanced settings or defaults
+  // Pull advanced or defaults
   const adv = item.advanced || {};
   const perf = adv.perf || 'medium';
   const monitoring = adv.monitoring ?? true;
   const username = adv.username || '';
   const sshKey = adv.sshKey || '';
+  const ipMode = adv.ipMode || 'dhcp';
+  const ipAddress = adv.ipAddress || '';
+  const subnetMask = adv.subnetMask || '24';
+
+  // Local IP + validation
+  const [localIp, setLocalIp] = useState(ipAddress);
+  const [ipError, setIpError] = useState('');
+
+  useEffect(() => {
+    setLocalIp(ipAddress);
+    setIpError('');
+  }, [ipAddress, ipMode]);
 
   // Handlers
   const handleClick = e => setAnchorEl(e.currentTarget);
@@ -86,6 +100,34 @@ export default function WhiteboardItem({
 
   const handleSshKeyChange = e =>
     onAdvancedChange(item.id, { ...adv, sshKey: e.target.value });
+
+  const handleIpModeChange = e =>
+    onAdvancedChange(item.id, {
+      ...adv,
+      ipMode: e.target.value,
+      ipAddress: '',
+      // keep existing mask or default to 24
+      subnetMask: adv.subnetMask || '24',
+    });
+
+  const handleIpAddressChange = e => {
+    const val = e.target.value;
+    setLocalIp(val);
+
+    // IPv4 regex
+    const ipv4 = /^(25[0-5]|2[0-4]\d|[01]?\d?\d)(\.(25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$/;
+    if (!val) {
+      setIpError('IP address is required');
+    } else if (!ipv4.test(val)) {
+      setIpError('Invalid IPv4 address');
+    } else {
+      setIpError('');
+      onAdvancedChange(item.id, { ...adv, ipMode: 'static', ipAddress: val });
+    }
+  };
+
+  const handleMaskChange = e =>
+    onAdvancedChange(item.id, { ...adv, subnetMask: e.target.value });
 
   const size = gridSize;
   const baseType = item.id.split('-')[0];
@@ -134,8 +176,66 @@ export default function WhiteboardItem({
           </Typography>
 
           {baseType === 'vmPack' ? (
-            /* VM-Pack UI… */
-            <></>
+            <>
+              <Typography variant="subtitle1" gutterBottom>
+                Pack de VMs
+              </Typography>
+
+              {/* Nombre de VMs */}
+              <TextField
+                label="Nombre"
+                type="number"
+                fullWidth
+                size="small"
+                margin="dense"
+                inputProps={{ min: 1, max: 10 }}
+                value={item.group?.count || ''}
+                onChange={e => {
+                  const count = parseInt(e.target.value, 10) || 1;
+                  onGroupChange(item.id, {
+                    ...item.group,
+                    count: Math.min(Math.max(count, 1), 10)
+                  });
+                }}
+              />
+
+              {/* Sélection OS */}
+              <FormControl fullWidth size="small" margin="dense">
+                <InputLabel>OS</InputLabel>
+                <Select
+                  value={item.group?.templateType || ''}
+                  label="OS"
+                  onChange={e =>
+                    onGroupChange(item.id, {
+                      ...item.group,
+                      templateType: e.target.value
+                    })
+                  }
+                >
+                  <MenuItem value="debian">Debian</MenuItem>
+                  <MenuItem value="ubuntu">Ubuntu</MenuItem>
+                  <MenuItem value="centos">CentOS</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* VLANs partagés */}
+              <FormControl fullWidth size="small" margin="dense">
+                <InputLabel>VLANs</InputLabel>
+                <Select
+                  multiple
+                  value={item.vlans}
+                  renderValue={vals => vals.join(', ')}
+                  onChange={e => onVlanChange(item.id, e.target.value)}
+                >
+                  {availableVlans.map(v => (
+                    <MenuItem key={v.id} value={v.id}>
+                      <Checkbox checked={item.vlans.includes(v.id)} />
+                      <ListItemText primary={`${v.name} (${v.id})`} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </>
           ) : (
             <>
               {/* Roles */}
@@ -194,11 +294,7 @@ export default function WhiteboardItem({
         keepMounted
         onClose={handleAdvClose}
         PaperProps={{
-          sx: {
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-            p: 2,
-          },
+          sx: { borderRadius: 2, bgcolor: 'background.paper', p: 2 },
         }}
       >
         <DialogTitle>Advanced Settings</DialogTitle>
@@ -206,17 +302,14 @@ export default function WhiteboardItem({
         <DialogContent dividers>
           {/* Performance Tier Cards */}
           <Typography gutterBottom>Performance Tier</Typography>
-          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
             {perfOptions.map(opt => (
               <Paper
                 key={opt.value}
                 elevation={perf === opt.value ? 8 : 2}
                 onClick={() => handlePerfSelect(opt.value)}
                 sx={{
-                  flex: 1,
-                  p: 2,
-                  textAlign: 'center',
-                  borderRadius: 2,
+                  flex: 1, p: 2, textAlign: 'center', borderRadius: 2,
                   cursor: 'pointer',
                   bgcolor: perf === opt.value
                     ? 'primary.main'
@@ -227,18 +320,17 @@ export default function WhiteboardItem({
                   borderColor: perf === opt.value
                     ? 'primary.main'
                     : 'grey.300',
+                  color: perf === opt.value
+                    ? 'common.white'
+                    : 'text.primary',
                   transform: 'scale(1)',
                   transition: 'transform 0.3s, box-shadow 0.3s',
                   '&:hover': {
-                    transform: 'scale(1.15)',
-                    boxShadow: 6,
+                    transform: 'scale(1.15)', boxShadow: 6
                   },
                 }}
               >
-                <Typography
-                  variant="subtitle2"
-                  color={perf === opt.value ? 'common.white' : 'text.primary'}
-                >
+                <Typography variant="subtitle2">
                   {opt.label}
                 </Typography>
               </Paper>
@@ -247,12 +339,7 @@ export default function WhiteboardItem({
 
           {/* Monitoring Agent */}
           <FormControlLabel
-            control={
-              <Switch
-                checked={monitoring}
-                onChange={handleMonitorToggle}
-              />
-            }
+            control={<Switch checked={monitoring} onChange={handleMonitorToggle} />}
             label="Monitoring Agent"
             sx={{ mb: 2 }}
           />
@@ -267,12 +354,11 @@ export default function WhiteboardItem({
             onChange={handleUsernameChange}
           />
 
-
-          {/* SSH Public Key (no inner border) */}
+          {/* SSH Public Key */}
           <TextField
             label="SSH Public Key"
             placeholder="ssh-rsa AAAA…"
-            variant="standard"      // ← removes the box outline
+            variant="standard"
             fullWidth
             size="small"
             margin="dense"
@@ -280,15 +366,57 @@ export default function WhiteboardItem({
             rows={3}
             value={sshKey}
             onChange={handleSshKeyChange}
-            InputProps={{
-              disableUnderline: true // ← also hide the underline if you want it totally borderless
-            }}
-            inputProps={{
-              style: {
-                padding: '8px',      // adds 8px of inner padding on all sides
-              }
-            }}
+            InputProps={{ disableUnderline: true }}
+            inputProps={{ style: { padding: '8px' } }}
           />
+
+          {/* IP Configuration */}
+          <Typography variant="subtitle1" sx={{ mt: 2 }}>
+            IP Configuration
+          </Typography>
+          <RadioGroup row value={ipMode} onChange={handleIpModeChange} sx={{ mb: 1 }}>
+            <FormControlLabel value="dhcp" control={<Radio />} label="DHCP" />
+            <FormControlLabel value="static" control={<Radio />} label="Static" />
+          </RadioGroup>
+
+          {ipMode === 'static' && (
+            <>
+              <Box display="flex" alignItems="center" gap={1} mb={ipError ? 0 : 2}>
+                {/* IP field is now flex:2 */}
+                <TextField
+                  label="IP Address"
+                  placeholder="192.168.1.10"
+                  size="small"
+                  margin="dense"
+                  value={localIp}
+                  onChange={handleIpAddressChange}
+                  error={!!ipError}
+                  sx={{ flex: 2 }}
+                />
+                <Typography>/</Typography>
+                {/* Mask field is now flex:1 */}
+                <FormControl size="small" margin="dense" sx={{ flex: 1 }}>
+                  <InputLabel>Mask</InputLabel>
+                  <Select
+                    value={subnetMask}
+                    label="Mask"
+                    onChange={handleMaskChange}
+                  >
+                    {Array.from({ length: 33 }, (_, i) => String(i)).map(m => (
+                      <MenuItem key={m} value={m}>
+                        {m}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+              {ipError && (
+                <Typography color="error" variant="caption">
+                  {ipError}
+                </Typography>
+              )}
+            </>
+          )}
         </DialogContent>
 
         <DialogActions>

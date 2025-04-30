@@ -192,10 +192,13 @@ export default function App() {
 
       const adv = item.advanced || {};
       const advancedData = {
-        perf: adv.perf ?? 'medium',  // default medium
-        mon_agent: adv.monitoring ?? true,      // renamed key, default true
+        perf: adv.perf ?? 'medium',
+        mon_agent: adv.monitoring ?? true,
         username: adv.username?.trim() || 'user',
         sshKey: adv.sshKey?.trim() || '',
+        ip_mode: adv.ipMode ?? 'dhcp',
+        ip_address: adv.ipAddress?.trim() || '',
+        subnet_mask: adv.subnetMask || ''
       };
 
       const baseEntry = {
@@ -207,6 +210,11 @@ export default function App() {
 
       if (item.group && type === 'vmPack') {
         const { count, templateType } = item.group;
+
+        if (!acc[templateType]) {
+
+          acc[templateType] = [];
+        }
         for (let i = 1; i <= count; i++) {
           acc[templateType].push({
             ...baseEntry,
@@ -222,6 +230,7 @@ export default function App() {
 
     console.log('Generated Config:', JSON.stringify(configs, null, 2));
   };
+
   const handleAdvancedChange = (itemId, advanced) => {
     setWhiteboardItems(ws =>
       ws.map(i =>
