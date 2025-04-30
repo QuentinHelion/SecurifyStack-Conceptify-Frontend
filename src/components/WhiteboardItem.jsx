@@ -1,25 +1,25 @@
 // src/components/WhiteboardItem.jsx
-import React, { useState, useEffect, forwardRef } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { useDrag } from 'react-dnd';
 import {
   Paper,
   Popover,
   Typography,
-  TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   Checkbox,
   ListItemText,
+  FormControlLabel,
+  Switch,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Slide,
-  FormControlLabel,
-  Switch,
+  TextField,
   Box,
 } from '@mui/material';
 
@@ -58,7 +58,7 @@ export default function WhiteboardItem({
   // Advanced dialog
   const [advOpen, setAdvOpen] = useState(false);
 
-  // Extract current advanced settings
+  // Extract advanced settings or defaults
   const adv = item.advanced || {};
   const perf = adv.perf || 'medium';
   const monitoring = adv.monitoring ?? true;
@@ -70,12 +70,12 @@ export default function WhiteboardItem({
   const handlePopoverClose = () => setAnchorEl(null);
 
   const handleAdvOpen = () => {
-    setAnchorEl(null);   // <-- close popover when advanced opens
+    setAnchorEl(null);
     setAdvOpen(true);
   };
   const handleAdvClose = () => setAdvOpen(false);
 
-  const handlePerfSelect = (value) =>
+  const handlePerfSelect = value =>
     onAdvancedChange(item.id, { ...adv, perf: value });
 
   const handleMonitorToggle = e =>
@@ -98,9 +98,8 @@ export default function WhiteboardItem({
         elevation={3}
         onClick={handleClick}
         onContextMenu={e => { e.preventDefault(); onContextMenu(e); }}
-        className={`absolute p-2 cursor-move border-2 ${isDragging ? 'opacity-50' : 'border-blue-500'
-          }`}
-        style={{
+        sx={{
+          position: 'absolute',
           left: item.left,
           top: item.top,
           width: size,
@@ -108,10 +107,14 @@ export default function WhiteboardItem({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          border: 2,
+          borderColor: isDragging ? 'transparent' : 'primary.main',
+          cursor: 'move',
+          opacity: isDragging ? 0.5 : 1,
           zIndex: 10,
         }}
       >
-        <span className="text-2xl">{item.icon}</span>
+        <Typography variant="h4">{item.icon}</Typography>
       </Paper>
 
       {/* Roles & VLAN Popover */}
@@ -125,13 +128,13 @@ export default function WhiteboardItem({
         disableEnforceFocus
         disableRestoreFocus
       >
-        <Box sx={{ p: 2, minWidth: 220 }}>
+        <Box sx={{ p: 2, minWidth: 240 }}>
           <Typography variant="h6" gutterBottom>
             {item.name}
           </Typography>
 
           {baseType === 'vmPack' ? (
-            /* your VM-Pack UI… */
+            /* VM-Pack UI… */
             <></>
           ) : (
             <>
@@ -171,7 +174,7 @@ export default function WhiteboardItem({
                 </Select>
               </FormControl>
 
-              {/* Advanced button for Windows/Linux */}
+              {/* Advanced button */}
               {(baseType === 'windowsServer' || baseType === 'linuxServer') && (
                 <Box textAlign="right" sx={{ mt: 2 }}>
                   <Button variant="outlined" size="small" onClick={handleAdvOpen}>
@@ -195,33 +198,50 @@ export default function WhiteboardItem({
             borderRadius: 2,
             bgcolor: 'background.paper',
             p: 2,
-          }
+          },
         }}
       >
         <DialogTitle>Advanced Settings</DialogTitle>
 
         <DialogContent dividers>
-          {/* Performance Tier as cards */}
+          {/* Performance Tier Cards */}
           <Typography gutterBottom>Performance Tier</Typography>
-          <Box display="flex" gap={2} mb={2}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
             {perfOptions.map(opt => (
-              <Box
+              <Paper
                 key={opt.value}
+                elevation={perf === opt.value ? 8 : 2}
                 onClick={() => handlePerfSelect(opt.value)}
                 sx={{
                   flex: 1,
                   p: 2,
                   textAlign: 'center',
-                  borderRadius: 1,
-                  border: 2,
-                  borderColor: perf === opt.value ? 'primary.main' : 'grey.300',
+                  borderRadius: 2,
                   cursor: 'pointer',
-                  transition: 'transform 0.2s',
-                  '&:hover': { transform: 'scale(1.05)' },
+                  bgcolor: perf === opt.value
+                    ? 'primary.main'
+                    : 'background.paper',
+                  border: perf === opt.value
+                    ? '2px solid'
+                    : '1px solid grey',
+                  borderColor: perf === opt.value
+                    ? 'primary.main'
+                    : 'grey.300',
+                  transform: 'scale(1)',
+                  transition: 'transform 0.3s, box-shadow 0.3s',
+                  '&:hover': {
+                    transform: 'scale(1.15)',
+                    boxShadow: 6,
+                  },
                 }}
               >
-                <Typography variant="body2">{opt.label}</Typography>
-              </Box>
+                <Typography
+                  variant="subtitle2"
+                  color={perf === opt.value ? 'common.white' : 'text.primary'}
+                >
+                  {opt.label}
+                </Typography>
+              </Paper>
             ))}
           </Box>
 
@@ -234,6 +254,7 @@ export default function WhiteboardItem({
               />
             }
             label="Monitoring Agent"
+            sx={{ mb: 2 }}
           />
 
           {/* SSH Username */}
@@ -246,10 +267,12 @@ export default function WhiteboardItem({
             onChange={handleUsernameChange}
           />
 
-          {/* SSH Public Key */}
+
+          {/* SSH Public Key (no inner border) */}
           <TextField
             label="SSH Public Key"
             placeholder="ssh-rsa AAAA…"
+            variant="standard"      // ← removes the box outline
             fullWidth
             size="small"
             margin="dense"
@@ -257,6 +280,14 @@ export default function WhiteboardItem({
             rows={3}
             value={sshKey}
             onChange={handleSshKeyChange}
+            InputProps={{
+              disableUnderline: true // ← also hide the underline if you want it totally borderless
+            }}
+            inputProps={{
+              style: {
+                padding: '8px',      // adds 8px of inner padding on all sides
+              }
+            }}
           />
         </DialogContent>
 

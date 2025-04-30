@@ -187,20 +187,39 @@ export default function App() {
   // generate JSON
   const generateConfigFiles = () => {
     const configs = whiteboardItems.reduce((acc, item) => {
-      if (item.group && item.id.startsWith('vmPack-')) {
-        const { count, os, vlans: gv } = item.group;
+      const type = item.id.split('-')[0];
+      if (!acc[type]) acc[type] = [];
+
+      const adv = item.advanced || {};
+      const advancedData = {
+        perf: adv.perf ?? 'medium',  // default medium
+        mon_agent: adv.monitoring ?? true,      // renamed key, default true
+        username: adv.username?.trim() || 'user',
+        sshKey: adv.sshKey?.trim() || '',
+      };
+
+      const baseEntry = {
+        id: item.id,
+        roles: item.roles,
+        vlans: item.vlans,
+        advanced: advancedData,
+      };
+
+      if (item.group && type === 'vmPack') {
+        const { count, templateType } = item.group;
         for (let i = 1; i <= count; i++) {
-          const vmId = `${os}-${item.id}-vm${i}`;
-          acc[os] ??= [];
-          acc[os].push({ id: vmId, roles: item.roles, vlans: gv });
+          acc[templateType].push({
+            ...baseEntry,
+            id: `${templateType}-${item.id}-vm${i}`,
+          });
         }
       } else {
-        const type = item.id.split('-')[0];
-        acc[type] ??= [];
-        acc[type].push({ id: item.id, roles: item.roles, vlans: item.vlans });
+        acc[type].push(baseEntry);
       }
+
       return acc;
     }, {});
+
     console.log('Generated Config:', JSON.stringify(configs, null, 2));
   };
   const handleAdvancedChange = (itemId, advanced) => {

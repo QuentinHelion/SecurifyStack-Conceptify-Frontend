@@ -12,10 +12,9 @@ import {
     Slide,
 } from '@mui/material';
 
-// Slide-up transition for the dialog
-const Transition = forwardRef(function Transition(props, ref) {
-    return <Slide direction="up" ref={ref} {...props} />;
-});
+const Transition = forwardRef((props, ref) => (
+    <Slide direction="up" ref={ref} {...props} />
+));
 
 export default function FooterActions({
     onSaveWork,
@@ -55,7 +54,7 @@ export default function FooterActions({
                 </Button>
             </Box>
 
-            {/* Snackbar for save confirmation */}
+            {/* Save confirmation snackbar */}
             <Snackbar
                 anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
                 open={snackbarOpen}
@@ -71,7 +70,7 @@ export default function FooterActions({
                 </Alert>
             </Snackbar>
 
-            {/* Confirmation Dialog with rounded white paper */}
+            {/* Clear Cache confirmation dialog */}
             <Dialog
                 open={confirmOpen}
                 TransitionComponent={Transition}
@@ -79,9 +78,9 @@ export default function FooterActions({
                 onClose={handleCancelClear}
                 PaperProps={{
                     sx: {
-                        borderRadius: 2,             // rounded corners
-                        bgcolor: 'background.paper', // white background
-                        p: 1,                        // inner padding
+                        borderRadius: 2,
+                        bgcolor: 'background.paper',
+                        p: 2,
                     },
                 }}
             >
@@ -91,7 +90,11 @@ export default function FooterActions({
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCancelClear}>Cancel</Button>
-                    <Button onClick={handleConfirmClear} color="error">
+                    <Button
+                        variant="contained"
+                        color="error"
+                        onClick={handleConfirmClear}
+                    >
                         Clear
                     </Button>
                 </DialogActions>
