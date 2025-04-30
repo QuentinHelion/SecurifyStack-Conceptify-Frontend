@@ -8,19 +8,27 @@ import DeleteArea from './DeleteArea';
 export default function BoardView({
     whiteboardItems,
     vlans,
-    rolesMap,        // renamed for clarity
+    rolesMap,
+    legendItems,
     gridSize,
     occupiedCells,
     onDrop,
     onDeleteItem,
-    onRoleToggle,    // now coming from App
-    onVlanChange,    // now coming from App
+    onRoleToggle,
+    onVlanChange,
+    onGroupChange,
 }) {
-    // Recompute the VLAN‐group bounding boxes exactly as before…
+    // Compute VLAN-group bounding boxes, now including vmPack.group.vlans
     const vlanBounds = vlans
         .map(vlan => {
-            const members = whiteboardItems.filter(i => i.vlans.includes(vlan.id));
-            if (!members.length) return null;
+            // include items whose .vlans or .group.vlans contain this VLAN
+            const members = whiteboardItems.filter(i => {
+                const hasDirect = i.vlans?.includes(vlan.id);
+                const hasGroup = i.group?.vlans?.includes(vlan.id);
+                return hasDirect || hasGroup;
+            });
+            if (members.length === 0) return null;
+
             const xs = members.map(i => i.left);
             const ys = members.map(i => i.top);
             const size = gridSize;
@@ -28,6 +36,7 @@ export default function BoardView({
             const top = Math.min(...ys) - 8;
             const right = Math.max(...xs) + size + 8;
             const bottom = Math.max(...ys) + size + 8;
+
             return {
                 ...vlan,
                 style: { left, top, width: right - left, height: bottom - top },
@@ -43,6 +52,7 @@ export default function BoardView({
                 occupiedCells={occupiedCells}
                 className="flex-grow"
             >
+                {/* VLAN-colored dashed frames */}
                 {vlanBounds.map(g => (
                     <Box
                         key={g.id}
@@ -57,19 +67,18 @@ export default function BoardView({
                     />
                 ))}
 
+                {/* All items (including vmPacks) */}
                 {whiteboardItems.map(item => (
                     <WhiteboardItem
                         key={item.id}
                         item={item}
-                        // ← properly pull the roles‐array out of the map
                         roles={rolesMap[item.id.split('-')[0]] || []}
                         availableVlans={vlans}
+                        legendItems={legendItems}
                         onRoleToggle={onRoleToggle}
                         onVlanChange={onVlanChange}
-                        onContextMenu={(e) => {
-                            e.preventDefault();
-                            onDeleteItem(item.id);
-                        }}
+                        onGroupChange={onGroupChange}
+                        onContextMenu={e => { e.preventDefault(); onDeleteItem(item.id); }}
                         gridSize={gridSize}
                     />
                 ))}
