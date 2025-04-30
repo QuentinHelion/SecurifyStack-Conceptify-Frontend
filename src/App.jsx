@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -7,6 +8,7 @@ import VlanPanel from './components/VlanPanel';
 import BoardView from './components/BoardView';
 import FooterActions from './components/FooterActions';
 
+// Legend definitions
 const legendItems = [
   { id: 'windowsServer', name: 'Windows Server', icon: '🪟' },
   { id: 'linuxServer', name: 'Linux Server', icon: '🐧' },
@@ -19,6 +21,7 @@ const legendItems = [
   { id: 'vmPack', name: 'VM Pack', icon: '📁' },
 ];
 
+// Roles per device type
 const roles = {
   windowsServer: ['ADDS', 'DNS', 'DHCP', 'IIS'],
   linuxServer: ['Web Server', 'Database', 'File Server'],
@@ -32,44 +35,52 @@ const roles = {
 
 const GRID_SIZE = 50;
 
+// initial VLAN list
+const initialVlans = [
+  { id: 10, name: 'VLAN 10', color: '#3B82F6' },
+  { id: 20, name: 'VLAN 20', color: '#F59E0B' },
+  { id: 30, name: 'VLAN 30', color: '#EF4444' },
+  { id: 40, name: 'VLAN 40', color: '#10B981' },
+];
+
 export default function App() {
+  // board state
   const [whiteboardItems, setWhiteboardItems] = useState([]);
   const [occupiedCells, setOccupiedCells] = useState({});
 
-  // seed 4 VLANs
-  const [vlans, setVlans] = useState([
-    { id: 10, name: 'VLAN 10', color: '#3B82F6' },
-    { id: 20, name: 'VLAN 20', color: '#F59E0B' },
-    { id: 30, name: 'VLAN 30', color: '#EF4444' },
-    { id: 40, name: 'VLAN 40', color: '#10B981' },
-  ]);
+  // VLAN state
+  const [vlans, setVlans] = useState(initialVlans);
   const [newVlanId, setNewVlanId] = useState('');
   const [newVlanName, setNewVlanName] = useState('');
   const [newVlanColor, setNewVlanColor] = useState('#ffffff');
 
+  // save/snackbar
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const expirationTimeout = useRef(null);
+
+  // ID counters for legend items
   const itemCounters = useRef({});
 
-  // load from localStorage if <10m old
+  // load saved state (10-min TTL)
   useEffect(() => {
     const raw = localStorage.getItem('conceptify-state');
     if (!raw) return;
-    const { timestamp, whiteboardItems: saved, vlans: savedVlans } = JSON.parse(raw);
+    const { timestamp, whiteboardItems: savedItems, vlans: savedVlans } = JSON.parse(raw);
     if (Date.now() - timestamp > 10 * 60 * 1000) {
       localStorage.removeItem('conceptify-state');
       return;
     }
-    setWhiteboardItems(saved);
+    setWhiteboardItems(savedItems);
     setVlans(savedVlans);
 
-    // rebuild occupiedCells & counters
+    // rebuild occupiedCells
     const occ = {};
-    saved.forEach(i => occ[`${i.left},${i.top}`] = i.id);
+    savedItems.forEach(i => { occ[`${i.left},${i.top}`] = i.id });
     setOccupiedCells(occ);
 
+    // rebuild itemCounters
     const cnts = {};
-    saved.forEach(({ id }) => {
+    savedItems.forEach(({ id }) => {
       const [base, num] = id.split('-');
       const n = parseInt(num, 10);
       if (!isNaN(n)) cnts[base] = Math.max(cnts[base] || 0, n);
@@ -96,10 +107,10 @@ export default function App() {
     if (isOccupied(lx, ty, item.id)) return;
 
     if (item.id.includes('-')) {
-      // move
-      setWhiteboardItems(ws => ws.map(i =>
-        i.id === item.id ? { ...i, left: lx, top: ty } : i
-      ));
+      // move existing
+      setWhiteboardItems(ws =>
+        ws.map(i => i.id === item.id ? { ...i, left: lx, top: ty } : i)
+      );
       setOccupiedCells(o => {
         const nxt = { ...o };
         delete nxt[getCellKey(item.left, item.top)];
@@ -107,12 +118,11 @@ export default function App() {
         return nxt;
       });
     } else {
-      // new
+      // new from legend
       const base = item.id;
       const cnt = (itemCounters.current[base] || 0) + 1;
       itemCounters.current[base] = cnt;
       const newId = `${base}-${cnt}`;
-
       const newItem = {
         ...item,
         id: newId,
@@ -143,16 +153,16 @@ export default function App() {
     setWhiteboardItems(ws => ws.filter(i => i.id !== id));
   };
 
-  // VLAN panel handlers
+  // VLAN handlers
   const handleAddVlan = () => {
-    const num = parseInt(newVlanId, 10);
-    if (!isNaN(num) && newVlanName.trim()) {
-      setVlans(v => [...v, { id: num, name: newVlanName.trim(), color: newVlanColor }]);
+    const idNum = parseInt(newVlanId, 10);
+    if (!isNaN(idNum)) {
+      setVlans(v => [...v, { id: idNum, name: newVlanName.trim(), color: newVlanColor }]);
       setNewVlanId(''); setNewVlanName(''); setNewVlanColor('#ffffff');
     }
   };
-  const handleVlanColorChange = (id, c) => {
-    setVlans(v => v.map(x => x.id === id ? { ...x, color: c } : x));
+  const handleVlanColorChange = (id, color) => {
+    setVlans(v => v.map(x => x.id === id ? { ...x, color } : x));
   };
 
   // save work
@@ -166,15 +176,23 @@ export default function App() {
     }, 10 * 60 * 1000);
   };
 
+  // clear cache
+  const handleClearCache = () => {
+    localStorage.removeItem('conceptify-state');
+    setWhiteboardItems([]);
+    setOccupiedCells({});
+    setVlans(initialVlans);
+  };
+
   // generate JSON
   const generateConfigFiles = () => {
     const configs = whiteboardItems.reduce((acc, item) => {
       if (item.group && item.id.startsWith('vmPack-')) {
-        const { count, os: vmOS, vlans: gv } = item.group;
+        const { count, os, vlans: gv } = item.group;
         for (let i = 1; i <= count; i++) {
-          const vmId = `${vmOS}-${item.id}-vm${i}`;
-          acc[vmOS] ??= [];
-          acc[vmOS].push({ id: vmId, roles: item.roles, vlans: gv });
+          const vmId = `${os}-${item.id}-vm${i}`;
+          acc[os] ??= [];
+          acc[os].push({ id: vmId, roles: item.roles, vlans: gv });
         }
       } else {
         const type = item.id.split('-')[0];
@@ -192,7 +210,9 @@ export default function App() {
         <Box className="flex flex-grow">
           {/* Legend + VLAN panel */}
           <Paper elevation={3} className="w-64 p-4 overflow-y-auto">
-            <Typography variant="h6" gutterBottom>Legend</Typography>
+            <Typography variant="h6" gutterBottom>
+              Legend
+            </Typography>
             {legendItems.map(li => (
               <LegendItem key={li.id} {...li} />
             ))}
@@ -251,6 +271,7 @@ export default function App() {
         <FooterActions
           onSaveWork={saveWork}
           onGenerateConfig={generateConfigFiles}
+          onClearCache={handleClearCache}
           snackbarOpen={snackbarOpen}
           onCloseSnackbar={() => setSnackbarOpen(false)}
         />

@@ -22,7 +22,10 @@ export default function VlanPanel({
     const [idError, setIdError] = useState('');
     const [nameError, setNameError] = useState('');
     const [colorError, setColorError] = useState('');
+
     const MAX_NAME_LEN = 20;
+    const MIN_VLAN_ID = 1;
+    const MAX_VLAN_ID = 4094;
 
     const handleAdd = () => {
         let ok = true;
@@ -31,13 +34,16 @@ export default function VlanPanel({
 
         // ID validation
         if (!newVlanId) {
-            setIdError('ID is required');
+            setIdError(' • ID is required');
             ok = false;
         } else if (isNaN(idNum)) {
-            setIdError('Must be a number');
+            setIdError(' • Must be a number');
+            ok = false;
+        } else if (idNum < MIN_VLAN_ID || idNum > MAX_VLAN_ID) {
+            setIdError(` • ID must be between ${MIN_VLAN_ID} and ${MAX_VLAN_ID}`);
             ok = false;
         } else if (vlans.some(v => v.id === idNum)) {
-            setIdError('That ID already exists');
+            setIdError(' • That ID already exists');
             ok = false;
         } else {
             setIdError('');
@@ -45,13 +51,15 @@ export default function VlanPanel({
 
         // Name validation
         if (!trimmedName) {
-            setNameError('Name is required');
+            setNameError(' • Name is required');
             ok = false;
         } else if (trimmedName.length > MAX_NAME_LEN) {
-            setNameError(`Max ${MAX_NAME_LEN} characters`);
+            setNameError(` • Max ${MAX_NAME_LEN} characters`);
             ok = false;
-        } else if (vlans.some(v => v.name.toLowerCase() === trimmedName.toLowerCase())) {
-            setNameError('That name already exists');
+        } else if (
+            vlans.some(v => v.name.toLowerCase() === trimmedName.toLowerCase())
+        ) {
+            setNameError(' • That name already exists');
             ok = false;
         } else {
             setNameError('');
@@ -59,7 +67,7 @@ export default function VlanPanel({
 
         // Color validation
         if (vlans.some(v => v.color.toLowerCase() === newVlanColor.toLowerCase())) {
-            setColorError('That color is already in use');
+            setColorError(' • That color is already in use');
             ok = false;
         } else {
             setColorError('');
@@ -75,15 +83,23 @@ export default function VlanPanel({
                 VLANs
             </Typography>
 
-            <Box display="flex" alignItems="center" gap={1} mb={2}>
+            {/* Input row */}
+            <Box display="flex" alignItems="center" gap={1} mb={1}>
                 <TextField
                     label="ID"
-                    type="number"
+                    type="text"
                     size="small"
                     value={newVlanId}
-                    onChange={e => setNewVlanId(e.target.value)}
+                    onChange={e => {
+                        const val = e.target.value;
+                        if (/^\d*$/.test(val)) setNewVlanId(val);
+                    }}
+                    inputProps={{
+                        maxLength: 4,
+                        inputMode: 'numeric',
+                        pattern: '[0-9]*',
+                    }}
                     error={!!idError}
-                    helperText={idError}
                 />
 
                 <TextField
@@ -91,9 +107,8 @@ export default function VlanPanel({
                     size="small"
                     value={newVlanName}
                     onChange={e => setNewVlanName(e.target.value)}
-                    error={!!nameError}
-                    helperText={nameError}
                     inputProps={{ maxLength: MAX_NAME_LEN }}
+                    error={!!nameError}
                 />
 
                 <Box>
@@ -108,11 +123,6 @@ export default function VlanPanel({
                             padding: 0,
                         }}
                     />
-                    {colorError && (
-                        <Typography variant="caption" color="error">
-                            {colorError}
-                        </Typography>
-                    )}
                 </Box>
 
                 <IconButton size="small" onClick={handleAdd}>
@@ -120,6 +130,28 @@ export default function VlanPanel({
                 </IconButton>
             </Box>
 
+            {/* Error messages row */}
+            {(idError || nameError || colorError) && (
+                <Box mb={2}>
+                    {idError && (
+                        <Typography variant="caption" color="error" display="block">
+                            {idError}
+                        </Typography>
+                    )}
+                    {nameError && (
+                        <Typography variant="caption" color="error" display="block">
+                            {nameError}
+                        </Typography>
+                    )}
+                    {colorError && (
+                        <Typography variant="caption" color="error" display="block">
+                            {colorError}
+                        </Typography>
+                    )}
+                </Box>
+            )}
+
+            {/* Existing VLAN list */}
             {vlans.map(vlan => (
                 <Box key={vlan.id} display="flex" alignItems="center" gap={1} mb={1}>
                     <Box
@@ -128,7 +160,9 @@ export default function VlanPanel({
                         borderRadius="50%"
                         bgcolor={vlan.color}
                     />
-                    <Typography>{vlan.name} ({vlan.id})</Typography>
+                    <Typography>
+                        {vlan.name} ({vlan.id})
+                    </Typography>
                     <input
                         type="color"
                         value={vlan.color}
