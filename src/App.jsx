@@ -347,6 +347,7 @@ export default function App() {
 
         {/* Save confirmation */}
         <Snackbar
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
           open={snackbarOpen}
           autoHideDuration={6000}
           onClose={() => setSnackbarOpen(false)}
