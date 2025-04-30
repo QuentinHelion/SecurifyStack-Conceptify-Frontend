@@ -1,22 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+// App.jsx
+import React, { useState, useEffect, useRef } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import {
-  Paper,
   Box,
   Button,
+  Paper,
   TextField,
   IconButton,
   Typography,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
 import LegendItem from './components/LegendItem';
 import Whiteboard from './components/Whiteboard';
 import WhiteboardItem from './components/WhiteboardItem';
 import DeleteArea from './components/DeleteArea';
 
-// Legend items for drag-and-drop
+// Legend definitions
 const legendItems = [
   { id: 'windowsServer', name: 'Windows Server', icon: '🪟' },
   { id: 'linuxServer', name: 'Linux Server', icon: '🐧' },
@@ -28,7 +30,7 @@ const legendItems = [
   { id: 'webServer', name: 'Web Server', icon: '🌐' },
 ];
 
-// Roles per type
+// Roles per device type
 const roles = {
   windowsServer: ['ADDS', 'DNS', 'DHCP', 'IIS'],
   linuxServer: ['Web Server', 'Database', 'File Server'],
@@ -40,178 +42,207 @@ const roles = {
   webServer: ['Apache', 'Nginx', 'IIS'],
 };
 
-// Grid settings
 const GRID_SIZE = 50;
 
 export default function App() {
-  // Whiteboard items and occupancy map
+  // Board state
   const [whiteboardItems, setWhiteboardItems] = useState([]);
   const [occupiedCells, setOccupiedCells] = useState({});
 
-  // VLAN definitions
-  const [vlans, setVlans] = useState([
-    { id: 10, name: 'VLAN 10', color: '#3B82F6' },
-  ]);
-
-  // New VLAN form inputs
+  // VLAN definitions and form
+  const [vlans, setVlans] = useState([{ id: 10, name: 'VLAN 10', color: '#3B82F6' }]);
   const [newVlanId, setNewVlanId] = useState('');
   const [newVlanName, setNewVlanName] = useState('');
   const [newVlanColor, setNewVlanColor] = useState('#ffffff');
 
-  // Track per-type counters for unique IDs
+  // Save-work confirmation
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const expirationTimeout = useRef(null);
+
+  // Counter for generating unique IDs
   const itemCounters = useRef({});
 
-  // === DND & board helpers ===
+  // Load saved state (if <10 mins old)
+  useEffect(() => {
+    const raw = localStorage.getItem('conceptify-state');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.timestamp > 10 * 60 * 1000) {
+      localStorage.removeItem('conceptify-state');
+      return;
+    }
+    const { whiteboardItems: savedItems, vlans: savedVlans } = parsed;
+    setWhiteboardItems(savedItems);
+    setVlans(savedVlans);
+
+    // rebuild occupiedCells
+    const occ = {};
+    savedItems.forEach(i => {
+      occ[`${i.left},${i.top}`] = i.id;
+    });
+    setOccupiedCells(occ);
+
+    // rebuild itemCounters so we don’t reuse IDs
+    const counters = {};
+    savedItems.forEach(({ id }) => {
+      const [base, num] = id.split('-');
+      const n = parseInt(num, 10);
+      if (!isNaN(n)) {
+        counters[base] = Math.max(counters[base] || 0, n);
+      }
+    });
+    itemCounters.current = counters;
+  }, []);
+
+  // Helpers
   const snapToGrid = (x, y) => [
     Math.round(x / GRID_SIZE) * GRID_SIZE,
     Math.round(y / GRID_SIZE) * GRID_SIZE,
   ];
-
   const getCellKey = (x, y) => `${x},${y}`;
-
-  const isCellOccupied = (x, y, movingItemId) => {
-    const key = getCellKey(x, y);
-    const occupiedBy = occupiedCells[key];
-    return occupiedBy && occupiedBy !== movingItemId;
+  const isCellOccupied = (x, y, id) => {
+    const occupant = occupiedCells[getCellKey(x, y)];
+    return occupant && occupant !== id;
   };
 
-  // Handle drop (both new legend items and moving existing ones)
-  const handleDrop = (item, left, top, isWithinBounds) => {
-    if (!isWithinBounds) return;
-
-    const [snappedLeft, snappedTop] = snapToGrid(left, top);
-    const cellKey = getCellKey(snappedLeft, snappedTop);
-
-    // Prevent overlap
-    if (isCellOccupied(snappedLeft, snappedTop, item.id)) {
-      return;
-    }
+  // Handle drag-and-drop
+  const handleDrop = (item, left, top, inBounds) => {
+    if (!inBounds) return;
+    const [lx, ty] = snapToGrid(left, top);
+    const key = getCellKey(lx, ty);
+    if (isCellOccupied(lx, ty, item.id)) return;
 
     if (item.id.includes('-')) {
       // Move existing
       setWhiteboardItems(ws =>
-        ws.map(i =>
-          i.id === item.id
-            ? { ...i, left: snappedLeft, top: snappedTop }
-            : i
-        )
+        ws.map(i => (i.id === item.id ? { ...i, left: lx, top: ty } : i))
       );
       setOccupiedCells(prev => {
         const next = { ...prev };
-        const oldKey = getCellKey(item.left, item.top);
-        delete next[oldKey];
-        next[cellKey] = item.id;
+        delete next[getCellKey(item.left, item.top)];
+        next[key] = item.id;
         return next;
       });
-
     } else {
-      // New item from legend
-      const baseType = item.id;
-      const count = (itemCounters.current[baseType] || 0) + 1;
-      itemCounters.current[baseType] = count;
-      const newItemId = `${baseType}-${count}`;
-
+      // New from legend
+      const base = item.id;
+      const cnt = (itemCounters.current[base] || 0) + 1;
+      itemCounters.current[base] = cnt;
+      const newId = `${base}-${cnt}`;
       const newItem = {
         ...item,
-        id: newItemId,
-        left: snappedLeft,
-        top: snappedTop,
+        id: newId,
+        left: lx,
+        top: ty,
         roles: [],
         vlans: [],
       };
-
       setWhiteboardItems(ws => [...ws, newItem]);
-      setOccupiedCells(prev => ({ ...prev, [cellKey]: newItemId }));
+      setOccupiedCells(o => ({ ...o, [key]: newId }));
     }
   };
 
-  const handleDeleteItem = (itemId) => {
-    const item = whiteboardItems.find(i => i.id === itemId);
-    if (item) {
-      const key = getCellKey(item.left, item.top);
+  // Delete item
+  const handleDeleteItem = id => {
+    const it = whiteboardItems.find(i => i.id === id);
+    if (it) {
       setOccupiedCells(prev => {
         const next = { ...prev };
-        delete next[key];
+        delete next[getCellKey(it.left, it.top)];
         return next;
       });
     }
-    setWhiteboardItems(ws => ws.filter(i => i.id !== itemId));
+    setWhiteboardItems(ws => ws.filter(i => i.id !== id));
   };
 
-  // === VLAN management ===
+  // VLAN add & color-edit
   const handleAddVlan = () => {
-    const idNum = parseInt(newVlanId, 10);
-    if (!isNaN(idNum) && newVlanName.trim()) {
-      setVlans(v => [...v, { id: idNum, name: newVlanName.trim(), color: newVlanColor }]);
+    const num = parseInt(newVlanId, 10);
+    if (!isNaN(num) && newVlanName.trim()) {
+      setVlans(v => [...v, { id: num, name: newVlanName.trim(), color: newVlanColor }]);
       setNewVlanId('');
       setNewVlanName('');
       setNewVlanColor('#ffffff');
     }
   };
-
   const handleVlanColorChange = (id, color) => {
-    setVlans(v => v.map(x => x.id === id ? { ...x, color } : x));
+    setVlans(v => v.map(x => (x.id === id ? { ...x, color } : x)));
   };
 
-  // === Compute VLAN bounding frames ===
-  const vlanBounds = vlans.map(vlan => {
-    const members = whiteboardItems.filter(item => (item.vlans || []).includes(vlan.id));
-    if (!members.length) return null;
-
-    const xs = members.map(i => i.left);
-    const ys = members.map(i => i.top);
-    const size = GRID_SIZE * 2;
-
-    const left = Math.min(...xs) - 8;
-    const top = Math.min(...ys) - 8;
-    const right = Math.max(...xs) + size + 8;
-    const bottom = Math.max(...ys) + size + 8;
-
-    return {
-      id: vlan.id,
-      name: vlan.name,
-      color: vlan.color,
-      style: { left, top, width: right - left, height: bottom - top }
+  // Save work (10-minute TTL)
+  const saveWork = () => {
+    const payload = {
+      timestamp: Date.now(),
+      whiteboardItems,
+      vlans,
     };
-  }).filter(Boolean);
-
-  // === Save progress → download JSON ===
-  const saveProgress = () => {
-    const data = { whiteboardItems, vlans };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'conceptify-progress.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    localStorage.setItem('conceptify-state', JSON.stringify(payload));
+    setSnackbarOpen(true);
+    if (expirationTimeout.current) clearTimeout(expirationTimeout.current);
+    expirationTimeout.current = setTimeout(() => {
+      localStorage.removeItem('conceptify-state');
+    }, 10 * 60 * 1000);
   };
+
+  // Generate config JSON
+  const generateConfigFiles = () => {
+    const configs = whiteboardItems.reduce((acc, item) => {
+      const type = item.id.split('-')[0];
+      if (!acc[type]) acc[type] = [];
+      acc[type].push({
+        id: item.id,
+        roles: item.roles,
+        vlans: item.vlans,
+      });
+      return acc;
+    }, {});
+    console.log('Generated Config:', JSON.stringify(configs, null, 2));
+  };
+
+  // Compute VLAN group frames
+  const vlanBounds = vlans
+    .map(vlan => {
+      const members = whiteboardItems.filter(i => i.vlans.includes(vlan.id));
+      if (!members.length) return null;
+      const xs = members.map(i => i.left);
+      const ys = members.map(i => i.top);
+      const size = GRID_SIZE;
+      const left = Math.min(...xs) - 8;
+      const top = Math.min(...ys) - 8;
+      const right = Math.max(...xs) + size + 8;
+      const bottom = Math.max(...ys) + size + 8;
+      return {
+        ...vlan,
+        style: { left, top, width: right - left, height: bottom - top },
+      };
+    })
+    .filter(Boolean);
 
   return (
     <DndProvider backend={HTML5Backend}>
       <Box className="flex flex-col h-screen bg-gray-100">
         <Box className="flex flex-grow">
-          {/* Legend panel including VLAN controls */}
+          {/* Legend & VLAN panel */}
           <Paper elevation={3} className="w-64 p-4 overflow-y-auto">
-            <Typography variant="h6" gutterBottom>Legend</Typography>
+            <Typography variant="h6">Legend</Typography>
             {legendItems.map(li => (
               <LegendItem key={li.id} {...li} />
             ))}
 
             <Box mt={4}>
-              <Typography variant="h6" gutterBottom>VLANs</Typography>
+              <Typography variant="h6">VLANs</Typography>
               <Box display="flex" alignItems="center" gap={1} mb={2}>
                 <TextField
                   label="ID"
+                  size="small"
                   value={newVlanId}
                   onChange={e => setNewVlanId(e.target.value)}
-                  size="small"
                 />
                 <TextField
                   label="Name"
+                  size="small"
                   value={newVlanName}
                   onChange={e => setNewVlanName(e.target.value)}
-                  size="small"
                 />
                 <input
                   type="color"
@@ -219,7 +250,7 @@ export default function App() {
                   onChange={e => setNewVlanColor(e.target.value)}
                   style={{ width: 36, height: 36, border: 'none', padding: 0 }}
                 />
-                <IconButton onClick={handleAddVlan} size="small">
+                <IconButton size="small" onClick={handleAddVlan}>
                   <AddIcon />
                 </IconButton>
               </Box>
@@ -242,65 +273,92 @@ export default function App() {
           <Box className="flex flex-col flex-grow">
             <Whiteboard
               onDrop={handleDrop}
-              className="flex-grow"
               gridSize={GRID_SIZE}
               occupiedCells={occupiedCells}
+              className="flex-grow"
             >
-              {/* VLAN grouping backdrops */}
-              {vlanBounds.map(group => (
+              {/* VLAN group frames */}
+              {vlanBounds.map(g => (
                 <Box
-                  key={group.id}
+                  key={g.id}
                   className="absolute rounded-lg pointer-events-none"
                   sx={{
-                    border: `2px dashed ${group.color}`,
-                    backgroundColor: `${group.color}22`,
+                    border: `2px dashed ${g.color}`,
+                    backgroundColor: `${g.color}22`,
                     zIndex: 1,
-                    ...group.style,
+                    ...g.style,
                   }}
-                  title={group.name}
+                  title={g.name}
                 />
               ))}
 
-              {/* Whiteboard items */}
+              {/* Draggable items */}
               {whiteboardItems.map(item => (
                 <WhiteboardItem
                   key={item.id}
                   item={item}
                   roles={roles[item.id.split('-')[0]]}
-                  onRoleToggle={(id, role) => {
+                  availableVlans={vlans}
+                  onRoleToggle={(id, r) =>
                     setWhiteboardItems(ws =>
                       ws.map(i =>
                         i.id === id
                           ? {
-                            ...i, roles: i.roles.includes(role)
-                              ? i.roles.filter(r => r !== role)
-                              : [...i.roles, role]
+                            ...i,
+                            roles: i.roles.includes(r)
+                              ? i.roles.filter(x => x !== r)
+                              : [...i.roles, r],
                           }
                           : i
                       )
-                    );
-                  }}
+                    )
+                  }
+                  onVlanChange={(id, vs) =>
+                    setWhiteboardItems(ws =>
+                      ws.map(i =>
+                        i.id === id
+                          ? { ...i, vlans: vs }
+                          : i
+                      )
+                    )
+                  }
                   onContextMenu={(e, id) => {
-                    e.preventDefault(); handleDeleteItem(id);
+                    e.preventDefault();
+                    handleDeleteItem(id);
                   }}
                   gridSize={GRID_SIZE}
                 />
               ))}
 
-              <DeleteArea onDrop={item => handleDeleteItem(item.id)} />
+              <DeleteArea onDrop={i => handleDeleteItem(i.id)} />
             </Whiteboard>
           </Box>
         </Box>
 
-        {/* Footer controls */}
-        <Box display="flex" justifyContent="space-between" p={2}>
-          <Button variant="contained" color="primary" onClick={saveProgress}>
-            Save Progress
+        {/* Footer actions */}
+        <Box p={2} display="flex" justifyContent="space-between">
+          <Button variant="contained" color="primary" onClick={saveWork}>
+            Save Work
           </Button>
-          <Button variant="contained" color="secondary" onClick={() => {/* your generateConfigFiles here */ }}>
+          <Button variant="contained" color="secondary" onClick={generateConfigFiles}>
             Generate Config Files
           </Button>
         </Box>
+
+        {/* Save confirmation */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={() => setSnackbarOpen(false)}
+        >
+          <Alert
+            onClose={() => setSnackbarOpen(false)}
+            severity="success"
+            sx={{ width: '100%' }}
+          >
+            Your work is saved for 10 minutes.
+          </Alert>
+        </Snackbar>
       </Box>
     </DndProvider>
   );
