@@ -11,12 +11,15 @@ import FooterActions from './components/FooterActions';
 // Legend definitions
 const legendItems = [
   { id: 'windowsServer', name: 'Windows Server', icon: '🪟' },
+  { id: 'windows10', name: 'Windows 10', icon: '💻' },
+  { id: 'windows11', name: 'Windows 11', icon: '🖥️' },
   { id: 'linuxServer', name: 'Linux Server', icon: '🐧' },
   { id: 'networkSwitch', name: 'Network Switch', icon: '🔌' },
   { id: 'firewall', name: 'Firewall', icon: '🛡️' },
   { id: 'router', name: 'Router', icon: '📡' },
   { id: 'database', name: 'Database', icon: '🗄️' },
   { id: 'loadBalancer', name: 'Load Balancer', icon: '⚖️' },
+  { id: 'siemWazuh', name: '  Wazuh', icon: '🔍' },
   { id: 'webServer', name: 'Web Server', icon: '🌐' },
   { id: 'vmPack', name: 'VM Pack', icon: '📁' },
 ];
@@ -198,7 +201,12 @@ export default function App() {
         sshKey: adv.sshKey?.trim() || '',
         ip_mode: adv.ipMode ?? 'dhcp',
         ip_address: adv.ipAddress?.trim() || '',
-        subnet_mask: adv.subnetMask || ''
+        subnet_mask: adv.subnetMask || '',
+        os_version:
+          adv.osVersion
+          ?? (type === 'windows10' ? 'Windows 10'
+            : type === 'windows11' ? 'Windows 11'
+              : ''),
       };
 
       const baseEntry = {
